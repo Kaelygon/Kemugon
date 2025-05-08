@@ -1,0 +1,13 @@
+.obsidian
+/generated
+/CMakeFiles
+/CMakeCache.txt
+/cmake_install.cmake
+/zlocal
+/build/*
+/Makefile
+/callgrind*
+/vgcore.*
+/doxygen/*
+/*.log
+/assets

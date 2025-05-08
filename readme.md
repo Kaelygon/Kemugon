@@ -1,0 +1,11 @@
+Just a draft for now
+
+	64KiB ram
+	64KiB vram
+	16KiB bank size
+
+	16bit VAS sector ranges
+	0x0000 0x3FFF
+	0x4000 0x7FFF
+	0x8000 0xBFFF
+	0xC000 0xFFFF
