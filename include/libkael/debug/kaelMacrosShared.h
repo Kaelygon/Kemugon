@@ -7,9 +7,6 @@
 
 #pragma once
 
-// #define CLOCK_SPEED_HZ 3700000000U
- #define CLOCK_SPEED_HZ 3704954300U
-
 //128 to 255 errors, 127 to 1 warnings, 0=success
 typedef enum {
 	 //General
@@ -22,3 +19,10 @@ typedef enum {
 	 //KaelStr
 	KAEL_ERR_ALLOC			= 130U
 }Kael_infoCode;
+
+//128 to 255 errors, 1 to 127 warnings, 0=success
+typedef enum {
+	 //General
+	KEMU_SUCCESS			= 0U,
+	KEMU_FAIL				= 128U,
+}Kemu_infoCode;

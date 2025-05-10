@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include "kaelygon/global/kaelMacrosShared.h"
+#include "libkael/debug/kaelMacrosShared.h"
 
 //Outside debugging, only null check without printing
 //Optimizer should be able to parse out unused parts

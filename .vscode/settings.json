@@ -186,7 +186,11 @@
     "tree.h": "c",
     "omp.h": "c",
     "disk.h": "c",
-    "sys.h": "c"
+    "sys.h": "c",
+    "dev.h": "c",
+    "adddevices.h": "c",
+    "rundev.h": "c",
+    "addDev.C": "cpp"
   },
   "makefile.launchConfigurations": [
     {

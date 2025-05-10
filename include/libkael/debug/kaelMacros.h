@@ -17,15 +17,15 @@
 
 //------ All targets shared variables ------
 
-#include "kaelygon/global/kaelMacrosShared.h"
+#include "libkael/debug/kaelMacrosShared.h"
 
 
 //------ Debug and Release target exclusives ------
 
 #if KAEL_DEBUG==1
-	#include "kaelygon/global/target/debugTarget.h"
+	#include "libkael/debug/target/debugTarget.h"
 
 #else 
-	#include "kaelygon/global/target/releaseTarget.h"
+	#include "libkael/debug/target/releaseTarget.h"
 
 #endif
