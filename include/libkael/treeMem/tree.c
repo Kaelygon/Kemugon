@@ -207,8 +207,13 @@ size_t kaelTree_length(const KaelTree *tree){
 }
 
 size_t kaelTree_empty(const KaelTree *tree){
-	if(NULL_CHECK(tree)){return 1;}
+	if(NULL_CHECK(tree)){return -1;}
 	return (tree->length==0);
+}
+
+size_t kaelTree_getIndex(const KaelTree *tree, const void *restrict element){
+	if(NULL_CHECK(tree)){return -1;}
+	return ((const uint8_t *)element - (const uint8_t *)tree->data) / tree->width;
 }
 
 //---get pointers---

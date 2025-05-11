@@ -7,14 +7,20 @@
  #include "kemugon/sys/sys.h"
  #include "kemugon/dev/dev.h"
 
-typedef struct {
-	uint16_t rw[8]; 	//register word
-	uint16_t pc; 		//program counter
-	uint16_t sp; 		//stack pointer
-	uint16_t flags;
-} KemuDev_CPU;
+typedef enum{
+	NONE_MBC,
+	BUSY_MBC,
+	REM_MBC,
+	ADD_MBC,
+}KemuDev_flagMBC;
 
-KemuDev *kemuDev_devByType(KemuSys *sys, uint16_t devType, uint8_t n);
+typedef enum{
+	CARRY_CPU		= 0b00000001,
+	OVERFLOW_CPU	= 0b00000010,
+}KemuDev_flagCPU;
+
+KemuDev *kemuDev_devByID(const KemuSys *sys, const uint16_t devID);
+KemuDev *kemuDev_devByType(const KemuSys *sys, const uint16_t devType, uint8_t n);
 
 void kemuDev_runCPU(KemuSys *sys, KemuDev *dev);
 void kemuDev_run(KemuSys *sys);

@@ -7,60 +7,71 @@
 #include "kemugon/sys/sys.h"
 #include "kemugon/sys/sysDev.h"
 
- /**
- * @brief System configuration addresses in VAS
-*/
-typedef enum {
-	PAGE_TABLE_ADDR	= 1,
-	DATA_ADDR			= 0x0200, //End of system reserved in bank0
-}KemuSys_addr;
-
-/**
- * @brief Returns direct active bank address by index
- */
-void *kemuSys_getPageTablePtr(const KaelTree *pageTable, uint16_t index){
-	/*
-		Raw data is stored in (void *)dev->data, this data is split into list of bank pointers (void**)dev->bank 
-		pageTable holds pointers of banks, kaelTree_get returns pageTable's pointer by index
-
-		(void*)kaelTree_get(pageTable, index) -> (void*)pageTable[index] -> (void**)dev->bank[N] -> (void*)dev->data + (uint8_t*)N*bankSize
-	*/
-	return *(void**)kaelTree_get(pageTable, index);
-}
-
 //------ Virtual Address Space Macro ------
-static uint16_t kemuSys_zeroBank = 0; //Logically disconnected bank
+static uint16_t kemuSys_nullBank[256] = {0}; //Logically disconnected bank
 
 /**
  * @brief Convert pageTable banks addresses into one 16-bit address
- * Since we don't know anything about the banks, sys->pageTableSize determines how much of the bank is allocated
+ * 
 */
-uint16_t* kemuSys_resolveVAS(KemuSys *sys, uint16_t addr) {
-	if(sys==NULL){//Invalid state
-		return &kemuSys_zeroBank;
+uint16_t* kemuSys_resolveVAS(const KemuSys *sys, const uint16_t addr) {
+	if(NULL_CHECK(sys)){
+		return &kemuSys_nullBank[0];
 	}
-	uint16_t bankSize = (UINT16_MAX/sys->pageTableSize);
-	uint16_t tableIndex = addr/bankSize;
-	uint16_t subAddr = addr - bankSize*tableIndex;
+	uint16_t frameIndex = addr / sys->pageSize;
+	uint16_t *frame = sys->frameTable[frameIndex];
+	uint16_t subAddr = addr - frameIndex * sys->pageSize;
+	uint16_t *element = &frame[subAddr]; //Pointer directly to dev->rawData element
+	return element;
+}
 
-	uint16_t *bank = kemuSys_getPageTablePtr(&sys->pageTable, tableIndex);
-	return bank!=NULL ? &bank[subAddr] : &kemuSys_zeroBank;
+//Called if sys->pageTable is modified
+void kemuSys_mapFrameTable(const KemuSys *sys) {
+	for(uint16_t i=0; i<sys->mapPageCount; i++){
+		KemuSys_pageEntry entry = sys->pageTable[i];
+		if(entry.devID==0){ //null terminated
+			break;
+		}
+		//Get device
+		KemuDev *curDev = kemuDev_devByID(sys, entry.devID);
+		uint16_t bankCount = (entry.lastBank - entry.firstBank + 1);
+		uint16_t devStart	= curDev->head.bankSize * entry.firstBank;
+		uint16_t devEnd 	= curDev->head.bankSize * bankCount + devStart;
+
+		//Create pointers to rawData in sys->pageSize sized chunks
+		uint16_t entryPageCount = (devEnd - devStart)/sys->pageSize;
+		entryPageCount = kaelMath_min(entryPageCount,sys->mapPageCount);
+		for(uint16_t j=0; j<entryPageCount; j++){
+			size_t offset = j * sys->pageSize *  sizeof(uint16_t);
+			sys->frameTable[entry.pageIndex + j] = curDev->data + offset;
+		}
+	}
 }
 
 //------ System ------
+
+
+uint16_t kemuSys_u8Pack(uint8_t hi, uint8_t lo){
+	return ((uint16_t)hi << 8U) | (lo & 0xFF);
+}
 
 /**
  * @brief Allocate emulated system to host memory
 */
 void kemuSys_alloc(KemuSys *sys){
-	kaelTree_alloc(&sys->pageTable, sizeof(void*)); 
-	kaelTree_resize(&sys->pageTable, 16); 
+	sys->mapPageCount = ((UINT16_MAX+1)/sys->pageSize);
+	sys->frameTable = calloc(sys->mapPageCount,sizeof(uint16_t*));
+	for (int i = 0; i < 256; ++i) {
+		sys->frameTable[i] = kemuSys_nullBank;
+	}
 
+	uint16_t pageCount = (UINT16_MAX+1)/sys->pageSize;
+	sys->pageTable = calloc(pageCount,sizeof(KemuSys_pageEntry));
 	kaelTree_alloc(&sys->dev, sizeof(KemuDev));
 }
 
 /**
- * @brief Free emulated memory
+ * @brief Free emulated system
 */
 void kemuSys_free(KemuSys *sys){
 	//Free devices and pageTable
@@ -70,8 +81,8 @@ void kemuSys_free(KemuSys *sys){
 		kaelTree_pop(&sys->dev);
 	}
 
-	//Free trees
-	kaelTree_free(&sys->pageTable);
+	free(sys->frameTable);
+	free(sys->pageTable);
 	kaelTree_free(&sys->dev);
 }
 
@@ -92,76 +103,146 @@ uint8_t kemuSys_bootload(KemuSys *sys){
 	KemuDev *ramDev = kemuDev_devByType(sys, RAM_DEV, 0);
 	KemuDev *romDev = kemuDev_devByType(sys, DATA_DEV, 0);
 
-	//Add 0th banks to page table
-	if(ramDev!=NULL && romDev!=NULL){
-		kaelTree_set(&sys->pageTable, 0, &ramDev->bank[0] );
-		kaelTree_set(&sys->pageTable, 1, &romDev->bank[0] );
+	KemuSys_pageEntry ramEntry = {
+		.devID	= ramDev->devID,
+		.pageIndex	= 0,
+		.firstBank	= 0,
+		.lastBank	= 0,
+	};
+	KemuSys_pageEntry romEntry = {
+		.devID	= romDev->devID,
+		.pageIndex	= 64,
+		.firstBank	= 0,
+		.lastBank	= 0,
+	};
 
-		#if KAEL_DEBUG
-			//Pointer sanity check
-			if((void*)ramDev->bank[0] != kemuSys_getPageTablePtr(&sys->pageTable, 0) ||
-				(void*)romDev->bank[0] != kemuSys_getPageTablePtr(&sys->pageTable, 1)
-			 ){
-				printf("pageTable pointer copy failed.\n");
-				return KEMU_FAIL;
-			 }
-		#endif
+	sys->pageTable[0] = ramEntry;
+	sys->pageTable[1] = romEntry;
 
-		return KEMU_SUCCESS;
-	}
-	return KEMU_FAIL;
+	kemuSys_mapFrameTable(sys);
+
+	return KEMU_SUCCESS;
 }
-
-
-/**
- * @brief Emulate Memory Bank Controller
- * TODO: Read section of ram and repopulate pageTable accordingly
-*/
-void kemuSys_MBC(KemuSys *sys){
-}
-
 
 /**
  * @brief Initialize system state
  * 
 */
-void kemuSys_boot(KemuSys *sys){
+uint8_t kemuSys_boot(KemuSys *sys){
 	//Fetch CPU and set program counter
 	KemuDev *cpu = kemuDev_devByType(sys, CPU_DEV, 0);
 	if( NULL_CHECK(cpu) || NULL_CHECK(cpu->bank[0]) ){
 		printf("CPU Fail\n");
-		return;
+		return KEMU_FAIL;
 	}
-	KemuDev_CPU *cpuReg = cpu->bank[0];
-	cpuReg->pc = DATA_ADDR;
+	KemuDev_CPU *cpuReg = (void *)cpu->bank[0];
+	cpuReg->pc = BOOT_ADDR;
 
 	if( kemuSys_bootload(sys) == KEMU_FAIL ){
 		printf("Failed to fetch RAM_DEV and DATA_DEV\n");
-		return;
+		return KEMU_FAIL;
 	}
 
-	//TODO: write bootloader program to rom that's run by cpu
+	//MBC Test program
+	KemuDev *ramDev = kemuDev_devByType(sys, RAM_DEV, 0);
+	KemuDev *dataDev = kemuDev_devByType(sys, DATA_DEV, 1);
 
-	kemuSys_MBC(sys);
+	//reference
+	KemuSys_pageEntry ramEntry = {
+		.devID	= ramDev->devID,
+		.pageIndex	= 0,
+		.firstBank	= 0,
+		.lastBank	= 1,
+	};
+	KemuSys_pageEntry romEntry = {
+		.devID	= dataDev->devID,
+		.pageIndex	= 128,
+		.firstBank	= 0,
+		.lastBank	= 1,
+	};
+
+	//Write the two structs 
+	SYS_VAS(MBC_FLAG_ADDR) = ADD_MBC;
+	SYS_VAS(PAGE_TABLE_ADDR+0x0000) = kemuSys_u8Pack( 0, 	ramDev->devID  	); //ramDev to page 0
+	SYS_VAS(PAGE_TABLE_ADDR+0x0001) = kemuSys_u8Pack( 1, 	0				 		); //Banks 0 to 1
+	SYS_VAS(PAGE_TABLE_ADDR+0x0002) = kemuSys_u8Pack( 128, dataDev->devID	); //dataDev to page 128
+	SYS_VAS(PAGE_TABLE_ADDR+0x0003) = kemuSys_u8Pack( 1, 	0				 		); //Banks 0 to 1
+
+	{
+	//TODO: Implement these CPU instructions and run the program. Verfiy that written values are identical to above. 
+	//
+	#include "kemugon/sys/instr.h"
+		uint16_t loader[] = {
+			//Write MBC Add flag
+			LD, R0, ADD_MBC,
+			ST, R0, MBC_FLAG_ADDR,
+
+			//Pack ram devID and page index 
+			LD, R0, ramDev->devID,
+			LD, R1, 0,
+			LD, R2, PAGE_TABLE_ADDR,
+			ADD, R2, 0,
+
+			//R2 = R0<<8 | R1
+			SHL, R0, 8,
+			OR, R0, R1,
+			ST, R2, R0,
+
+			//Pack ram bank range 
+			LD, R0, 0,
+			LD, R1, 1,
+			LD, R2, PAGE_TABLE_ADDR,
+			ADD, R2, 1,
+
+			//R2 = R0<<8 | R1
+			SHL, R0, 8,
+			OR, R0, R1,
+			ST, R2, R0,
+			
+			TRM,
+		};
+		
+		for(uint16_t i=0; i<sizeof(loader)/sizeof(uint16_t); i++){
+			SYS_VAS(BOOT_ADDR+i) = loader[i];
+		}
+		
+	}
+/*	
+	int ramCmp = memcmp(&ramEntry, (KemuSys_pageEntry *)&SYS_VAS(PAGE_TABLE_ADDR+0x0000), sizeof(KemuSys_pageEntry) );
+	int romCmp = memcmp(&romEntry, (KemuSys_pageEntry *)&SYS_VAS(PAGE_TABLE_ADDR+0x0002), sizeof(KemuSys_pageEntry) );
+	
+	printf("ramCmp %d\n",ramCmp );
+	printf("romCmp %d\n",romCmp );
+
+	int i = 1;
+	
+	if (*((char *)&i) == 1) puts("little endian");
+	else puts("big endian");
+
+	printf("Packed value: 0x%04X\n", kemuSys_u8Pack(0x12,0x34));
+*/
+	return KEMU_SUCCESS;
 }
 
 
 /**
- * @brief Execute instructions from ram and increment pc by word 
+ * @brief Emulate devices synced to system clock
  * 
 */
 void kemuSys_loop(KemuSys *sys){
+	sys->quitFlag = 0;
 	uint64_t cycleCount = 0;
 
 	KemuClock clock;
 	kemuClock_init(&clock, sys->hostClockSpeed, sys->emuClockSpeed);
 	
 	while(!sys->quitFlag){
-		kemuDev_run(sys);
+		kemuDev_run(sys); 
 		kemuClock_sync(&clock);
 		cycleCount++;
 
-		if (cycleCount >= 16) {
+		//debug terminate
+		if (cycleCount >= sys->emuClockSpeed) {
 			sys->quitFlag = 1;
 		}
 	}

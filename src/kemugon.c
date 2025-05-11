@@ -17,19 +17,17 @@ int main(){
 	KemuSys system = {
 		.emuClockSpeed  = 4194304U,
 		.hostClockSpeed = 3700003502U,
-		.pageTableSize = 4,
-		.pageTable = {0},
-		.dev = {0},
-		.quitFlag = 0,
+		.pageSize = 256U,
 	};
 	kemuSys_alloc(&system);
 
 	kemuSys_initDevices(&system);
 
-	kemuSys_boot(&system);
-	kemuSys_loop(&system);
-	
-	//Cleanup
+	uint8_t err = kemuSys_boot(&system);
+	if(err!=KEMU_FAIL){
+		kemuSys_loop(&system);
+	}
+
 	kemuSys_free(&system);
 
 	return 0;

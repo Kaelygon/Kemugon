@@ -15,11 +15,14 @@
  * @brief Allocate as image or in RAM on host
  * 
 */
-void kemuDev_alloc( KemuDev *disk ) {
-	disk->head.totalSize = disk->head.bankSize * disk->head.bankCount;
+uint8_t kemuDev_alloc( KemuDev *disk ) {
+	if(disk==NULL){
+		return KEMU_FAIL;
+	}
+	disk->head.totalSize = disk->head.bankSize * disk->head.bankCount * sizeof(uint16_t);
 	disk->bank = calloc(disk->head.bankCount, sizeof(void*));
 	if(NULL_CHECK(disk->bank)){
-		return;
+		return KEMU_FAIL;
 	};
 
 	if(disk->path!=NULL){ 
@@ -53,10 +56,12 @@ void kemuDev_alloc( KemuDev *disk ) {
 
 	// Addresses of the emulated disk bank pointers
 	for(uint64_t i=0; i<disk->head.bankCount; i++){
-		size_t offset = i*disk->head.bankSize;
+		size_t offset = i * disk->head.bankSize *  sizeof(uint16_t);
 		void *diskBankPtr  = (uint8_t *)disk->data + offset;
 		disk->bank[i] = diskBankPtr;
 	}
+
+	return KEMU_SUCCESS;
 }
 
 void kemuDev_free( KemuDev *disk ) {

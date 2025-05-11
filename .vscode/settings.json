@@ -190,7 +190,9 @@
     "dev.h": "c",
     "adddevices.h": "c",
     "rundev.h": "c",
-    "addDev.C": "cpp"
+    "addDev.C": "cpp",
+    "mman.h": "c",
+    "sysdev.h": "c"
   },
   "makefile.launchConfigurations": [
     {

@@ -25,9 +25,24 @@ void kemuClock_sync(KemuClock *clock) {
 
 	uint64_t timeNow = __rdtsc();
 	uint64_t elapsedTime = kaelMath_sub(timeNow, clock->startTime);
-	uint64_t waitTime 	= kaelMath_sub(clock->cycleRatio, elapsedTime);
-	rdtsc_sleep(waitTime);
-	clock->startTime += clock->cycleRatio + carry;
+	uint64_t waitTime = clock->cycleRatio - elapsedTime;
+	if(!kaelMath_isNegative(waitTime)){
+		rdtsc_sleep((uint64_t)waitTime);
+	}
+	clock->startTime = timeNow + clock->cycleRatio + carry;
+
+	#if KAEL_DEBUG
+		if(clock->printDelay==0){
+			if(kaelMath_isNegative(waitTime)){
+					printf("Emulation lagging behind by %ld host-cycles\n", -1*waitTime);
+			}else{
+				printf("Emulation headroom %ld host-cycles\n", waitTime);
+			}
+			clock->printDelay = clock->printFreq;
+		}else{
+			clock->printDelay--;
+		}
+	#endif
 }
 
 void kemuClock_init(KemuClock *clock, uint64_t hostHz, uint64_t emuHz) {
@@ -38,4 +53,6 @@ void kemuClock_init(KemuClock *clock, uint64_t hostHz, uint64_t emuHz) {
 	clock->lagCycle		= hostHz%emuHz; //How many host-cycles emulation lags each emu-cycle
 	clock->accumulator	= 0; 				//Accumulated lag
 	clock->startTime		= __rdtsc();	//Cycle start time in host cpu cycles
+	clock->printDelay		= 0;
+	clock->printFreq		= emuHz/4;
 }

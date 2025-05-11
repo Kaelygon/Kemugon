@@ -37,4 +37,6 @@ void *kaelTree_back(const KaelTree *tree);
 size_t kaelTree_length(const KaelTree *tree);
 size_t kaelTree_empty(const KaelTree *tree);
 
+size_t kaelTree_getIndex(const KaelTree *tree, const void *restrict element);
+
 //uint8_t kaelTree_next(const KaelTree *tree, void **current);

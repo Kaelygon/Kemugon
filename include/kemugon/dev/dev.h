@@ -15,8 +15,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef enum {
+typedef enum{
 	NULL_DEV,
+	MBC_DEV,	//memory bank controller
 	CPU_DEV,	
 	GPU_DEV,	
 	RAM_DEV,	
@@ -27,26 +28,32 @@ typedef enum {
 /**
  * @brief Device header is only visible to MBC, optimize size once the structure is decided
 */
-typedef struct {
+typedef struct{
 	size_t bankSize;
 	size_t bankCount;
 	size_t totalSize;
-	uint8_t isBigEnd;
-	uint8_t isVolatile;
 	uint8_t isROM;
 	uint8_t type;
-} KemuDev_head;
+}KemuDev_head;
 
 typedef struct {
+	uint16_t devID;
 	const char *path;
 	int fd;
 	KemuDev_head head;
-	void *data; // Raw memory on host system
-	void **bank; // Split image to bankSized segments to emulate banks
-} KemuDev;
+	uint16_t *data; // Raw memory on host system
+	uint16_t **bank; // Split image to bankSized segments to emulate banks
+}KemuDev;
 
-//------ Base ------
+//------ Special Devices ------
+
+typedef struct{
+	uint16_t rw[8]; 	//register word
+	uint16_t pc; 		//program counter
+	uint16_t sp; 		//stack pointer
+	uint16_t flags;
+}KemuDev_CPU;
 
 // Virtual device mapped to host system NVM or RAM
-void kemuDev_alloc( KemuDev *dev );
+uint8_t kemuDev_alloc( KemuDev *dev );
 void kemuDev_free( KemuDev *dev );

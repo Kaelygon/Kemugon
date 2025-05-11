@@ -25,6 +25,8 @@ typedef struct {
 	uint64_t lagCycle;
 	uint64_t accumulator;
 	uint64_t startTime;
+	uint64_t printDelay;
+	uint64_t printFreq;
 } KemuClock;
 
 void rdtsc_sleep(uint64_t sleepTime);
